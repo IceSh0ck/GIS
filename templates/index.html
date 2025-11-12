@@ -5,14 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ankara CBS Analiz</title>
 
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-     integrity="sha256-p4NxAoJBhpmA9A/aPddUY2ZYs0SdfMvYssmvAqZaM/VM="
-     crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-     crossorigin=""></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
+        /* CSS Stilleri (Değişmedi) */
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f2f5; }
         .container { display: flex; height: 100vh; }
         .sidebar-left {
@@ -34,20 +31,12 @@
             transition: background-color 0.3s;
         }
         .sidebar-left li:hover { background-color: #5d7fa3; }
-
-        .main-content {
-            flex-grow: 1;
-            padding: 0; /* Harita için padding'i kaldır */
-            position: relative;
+        .main-content { flex-grow: 1; padding: 0; position: relative; }
+        #map { 
+            width: 100%; 
+            height: 100vh; 
+            background-color: #e0e0e0; /* Parçalı harita yerine düz gri arka plan */
         }
-        
-        /* 2. HARİTA ALANI (YENİ) */
-        #map {
-            width: 100%;
-            height: 100vh;
-        }
-
-        /* Kontrol Paneli Stilleri (Değişmedi) */
         .control-panel-toggle {
             position: fixed;
             top: 20px;
@@ -96,14 +85,12 @@
                 <li onclick="updateMap('sicaklik')">1. Sıcaklık</li>
                 <li onclick="updateMap('nem')">2. Nem</li>
                 <li onclick="updateMap('egim')">3. Eğim</li>
-                </ul>
+            </ul>
         </div>
-
         <div class="main-content">
             <div id="map"></div>
         </div>
     </div>
-
     <div class="control-panel-toggle" id="toggle-panel-btn">Kontrol Paneli</div>
     <div class="sidebar-right" id="control-panel">
         <h3>Kontrol Paneli</h3>
@@ -148,32 +135,39 @@
             uploadSection.style.display = 'block';
         }
 
-        // --- HARİTA YÖNETİMİ (YENİ) ---
+        // --- HARİTA YÖNETİMİ (GÜNCELLENDİ) ---
         
-        // Haritayı başlat
-        const map = L.map('map').setView([39.93, 32.85], 9); // Ankara koordinatları
+        // 1. Ankara için sınırlar
+        const ankaraBounds = L.latLngBounds(
+            [39.4, 32.0], // Güney-Batı köşesi
+            [40.5, 33.7]  // Kuzey-Doğu köşesi
+        );
 
-        // Temel harita katmanı (OpenStreetMap)
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+        // 2. Haritayı KISITLAMALARLA başlat
+        const map = L.map('map', {
+            center: [39.93, 32.85],    
+            zoom: 9,                   
+            minZoom: 9,                
+            maxZoom: 14,               
+            maxBounds: ankaraBounds,   
+            maxBoundsViscosity: 1.0    
+        });
+
+        // 3. Temel harita katmanı (OpenStreetMap) SİLİNDİ
+        // L.tileLayer('...').addTo(map); <-- BU SATIR KALDIRILDI
 
         // Mevcut ilçe katmanını saklamak için global değişken
         let geojsonLayer = null;
 
-        // Haritayı güncelleyen ana fonksiyon
+        // Haritayı güncelleyen ana fonksiyon (Değişmedi)
         function updateMap(dataType) {
             console.log(`${dataType} için harita güncelleniyor...`);
-            // Sunucudan (app.py) renklendirilmiş GeoJSON verisini çek
             fetch(`/api/get_map_data/${dataType}`)
                 .then(response => response.json())
                 .then(geojsonData => {
-                    // Eski katman varsa kaldır
                     if (geojsonLayer) {
                         map.removeLayer(geojsonLayer);
                     }
-                    
-                    // Yeni GeoJSON katmanını oluştur
                     geojsonLayer = L.geoJson(geojsonData, {
                         style: styleFunction,
                         onEachFeature: onEachFeatureFunction
@@ -182,10 +176,10 @@
                 .catch(error => console.error('Harita verisi alınırken hata:', error));
         }
 
-        // İlçeleri nasıl renklendireceğimizi belirleyen fonksiyon
+        // Renklendirme fonksiyonu (Değişmedi)
         function styleFunction(feature) {
             return {
-                fillColor: feature.properties.renk || '#808080', // Renk app.py'den geliyor
+                fillColor: feature.properties.renk || '#808080',
                 weight: 2,
                 opacity: 1,
                 color: 'white',
@@ -194,7 +188,7 @@
             };
         }
 
-        // Her ilçeye tıklandığında ne olacağını belirleyen fonksiyon
+        // Tıklama fonksiyonu (Değişmedi)
         function onEachFeatureFunction(feature, layer) {
             let popupContent = `<b>${feature.properties.ilce}</b>`;
             if (feature.properties.ortalama) {
@@ -205,17 +199,15 @@
             layer.bindPopup(popupContent);
         }
 
-        // Sayfa yüklendiğinde haritayı boş olarak (sadece ilçe sınırları) çiz
-        // Başlangıçta 'sicaklik' verisi boş olacağı için sadece sınırları çizer
+        // Sayfa yüklendiğinde haritayı yükle (Değişmedi)
         document.addEventListener('DOMContentLoaded', () => {
             updateMap('sicaklik');
         });
 
-        // --- Form Gönderim Yönetimi (Güncellendi) ---
+        // Form Gönderim Yönetimi (Değişmedi)
         uploadForm.addEventListener('submit', function(event) {
             event.preventDefault();
             uploadStatus.innerText = 'Yükleniyor...';
-
             const formData = new FormData(uploadForm);
             
             fetch('/upload_data', {
@@ -227,11 +219,8 @@
                 if (data.success) {
                     uploadStatus.innerText = `Başarılı: ${data.message}`;
                     uploadStatus.style.color = 'green';
-                    
-                    // YÜKLEME BAŞARILI OLDUĞUNDA HARİTAYI GÜNCELLE (YENİ)
                     const currentDataType = formData.get('data_type');
                     updateMap(currentDataType);
-
                 } else {
                     uploadStatus.innerText = `Hata: ${data.error}`;
                     uploadStatus.style.color = 'red';
