@@ -182,14 +182,14 @@
                 .catch(error => console.error('Harita verisi alınırken hata:', error));
         }
 
-        // Renklendirme fonksiyonu (Değişmedi)
+        // Renklendirme fonksiyonu (Güncellendi)
         function styleFunction(feature) {
             return {
                 fillColor: feature.properties.renk || '#808080',
-                weight: 2,
+                weight: 3,                 // Eskiden 2 idi, kalınlığı artırıldı
                 opacity: 1,
-                color: 'white',
-                dashArray: '3',
+                color: '#333333',          // Eskiden 'white' idi, koyu gri yapıldı
+                dashArray: '',             // Eskiden '3' idi, düz çizgi yapıldı (daha belirgin)
                 fillOpacity: 0.7
             };
         }
@@ -240,3 +240,4 @@
     </script>
 </body>
 </html>
+
