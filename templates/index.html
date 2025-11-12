@@ -4,18 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ankara CBS Analiz</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhpmA9A/aPddUY2ZYs0SdfMvYssmvAqZaM/VM="
+     crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+
     <style>
-        /* Temel Sayfa Düzeni */
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f2f5; }
         .container { display: flex; height: 100vh; }
-
-        /* Sol Menü (Harita Seçenekleri) */
         .sidebar-left {
             width: 200px;
             background-color: #34495e;
             color: white;
             padding: 20px;
             box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 10;
         }
         .sidebar-left h2 { margin-top: 0; }
         .sidebar-left ul { list-style: none; padding: 0; }
@@ -29,26 +35,19 @@
         }
         .sidebar-left li:hover { background-color: #5d7fa3; }
 
-        /* Ana İçerik (Harita Alanı) */
         .main-content {
             flex-grow: 1;
-            padding: 20px;
+            padding: 0; /* Harita için padding'i kaldır */
             position: relative;
         }
-        #map-placeholder {
+        
+        /* 2. HARİTA ALANI (YENİ) */
+        #map {
             width: 100%;
-            height: 95%;
-            background-color: #e0e0e0;
-            border: 2px dashed #b0b0b0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 24px;
-            color: #777;
-            text-align: center;
+            height: 100vh;
         }
 
-        /* Sağ Kontrol Paneli (Gizli/Açılır) */
+        /* Kontrol Paneli Stilleri (Değişmedi) */
         .control-panel-toggle {
             position: fixed;
             top: 20px;
@@ -62,11 +61,10 @@
             z-index: 1001;
             font-weight: bold;
         }
-        
         .sidebar-right {
             position: fixed;
             top: 0;
-            right: -350px; /* Başlangıçta gizli */
+            right: -350px;
             width: 330px;
             height: 100vh;
             background-color: white;
@@ -76,47 +74,17 @@
             transition: right 0.4s ease;
             overflow-y: auto;
         }
-        .sidebar-right.open {
-            right: 0;
-        }
-        .sidebar-right h3 { margin-top: 0; }
-        .sidebar-right .data-type-buttons button {
-            display: block;
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-
-        /* Yükleme Formu (Panel içinde gizli) */
-        #upload-section {
-            display: none; /* Başlangıçta gizli */
-            margin-top: 20px;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
-        }
-        #upload-section h4 { margin-top: 0; }
+        .sidebar-right.open { right: 0; }
+        #upload-section { display: none; margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px; }
         #upload-form label { display: block; margin-top: 10px; }
-        #upload-form select, #upload-form input[type="file"] {
+        #upload-form select, #upload-form input[type="file"], #upload-form button {
             width: 100%;
             padding: 8px;
             margin-top: 5px;
-            box-sizing: border-box; /* Padding'i genişliğe dahil et */
+            box-sizing: border-box;
         }
-        #upload-form button {
-            width: 100%;
-            padding: 12px;
-            margin-top: 20px;
-            background-color: #2ecc71;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        #upload-form button:hover { background-color: #27ae60; }
+        #upload-form button { background-color: #2ecc71; color: white; border: none; cursor: pointer; }
         #upload-status { margin-top: 15px; font-weight: bold; }
-
     </style>
 </head>
 <body>
@@ -125,48 +93,37 @@
         <div class="sidebar-left">
             <h2>Harita Katmanları</h2>
             <ul>
-                <li onclick="showMap('sicaklik')">1. Sıcaklık</li>
-                <li onclick="showMap('nem')">2. Nem</li>
-                <li onclick="showMap('egim')">3. Eğim</li>
-                <li onclick="showMap('toplama')">4. Toplama Haritası</li>
-            </ul>
+                <li onclick="updateMap('sicaklik')">1. Sıcaklık</li>
+                <li onclick="updateMap('nem')">2. Nem</li>
+                <li onclick="updateMap('egim')">3. Eğim</li>
+                </ul>
         </div>
 
         <div class="main-content">
-            <div id="map-placeholder">
-                Gerçek CBS Haritası (örn: Leaflet.js)<br>
-                ve Ankara GeoJSON verisi buraya yüklenecek.
-            </div>
+            <div id="map"></div>
         </div>
     </div>
 
-    <button class="control-panel-toggle" id="toggle-panel-btn">Kontrol Paneli</button>
-
+    <div class="control-panel-toggle" id="toggle-panel-btn">Kontrol Paneli</div>
     <div class="sidebar-right" id="control-panel">
         <h3>Kontrol Paneli</h3>
-        <p>İşlem yapmak istediğiniz veri tipini seçin:</p>
-        
         <div class="data-type-buttons">
             <button onclick="showUploadForm('sicaklik')">1 - Sıcaklık</button>
             <button onclick="showUploadForm('nem')">2 - Nem</button>
             <button onclick="showUploadForm('egim')">3 - Eğim</button>
         </div>
-
         <div id="upload-section">
             <h4 id="upload-title">Veri Yükle</h4>
             <form id="upload-form">
                 <input type="hidden" id="data_type_input" name="data_type">
-
                 <label for="ilce-select">İlçe Seçin:</label>
                 <select id="ilce-select" name="ilce">
                     {% for ilce in ilceler %}
                         <option value="{{ ilce }}">{{ ilce }}</option>
                     {% endfor %}
                 </select>
-
                 <label for="file-upload">.CSV Dosyasını Yükleyin:</label>
                 <input type="file" id="file-upload" name="file" accept=".csv">
-
                 <button type="submit">Kaydet</button>
             </form>
             <div id="upload-status"></div>
@@ -174,8 +131,7 @@
     </div>
 
     <script>
-        // --- Kontrol Paneli ve Form Yönetimi ---
-
+        // --- Kontrol Paneli Yönetimi (Değişmedi) ---
         const panel = document.getElementById('control-panel');
         const toggleBtn = document.getElementById('toggle-panel-btn');
         const uploadSection = document.getElementById('upload-section');
@@ -184,26 +140,84 @@
         const uploadForm = document.getElementById('upload-form');
         const uploadStatus = document.getElementById('upload-status');
 
-        // Kontrol Panelini aç/kapat
-        toggleBtn.addEventListener('click', () => {
-            panel.classList.toggle('open');
-        });
+        toggleBtn.addEventListener('click', () => panel.classList.toggle('open'));
 
-        // Kontrol Panelindeki (Sıcaklık, Nem, Eğim) butonlarına basınca formu göster
         function showUploadForm(type) {
             uploadTitle.innerText = `${type.charAt(0).toUpperCase() + type.slice(1)} Verisi Yükle`;
-            dataTypeInput.value = type; // Gizli input'a veri tipini yaz
-            uploadSection.style.display = 'block'; // Formu görünür yap
+            dataTypeInput.value = type;
+            uploadSection.style.display = 'block';
         }
 
-        // Form "Kaydet" butonuna basıldığında
+        // --- HARİTA YÖNETİMİ (YENİ) ---
+        
+        // Haritayı başlat
+        const map = L.map('map').setView([39.93, 32.85], 9); // Ankara koordinatları
+
+        // Temel harita katmanı (OpenStreetMap)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Mevcut ilçe katmanını saklamak için global değişken
+        let geojsonLayer = null;
+
+        // Haritayı güncelleyen ana fonksiyon
+        function updateMap(dataType) {
+            console.log(`${dataType} için harita güncelleniyor...`);
+            // Sunucudan (app.py) renklendirilmiş GeoJSON verisini çek
+            fetch(`/api/get_map_data/${dataType}`)
+                .then(response => response.json())
+                .then(geojsonData => {
+                    // Eski katman varsa kaldır
+                    if (geojsonLayer) {
+                        map.removeLayer(geojsonLayer);
+                    }
+                    
+                    // Yeni GeoJSON katmanını oluştur
+                    geojsonLayer = L.geoJson(geojsonData, {
+                        style: styleFunction,
+                        onEachFeature: onEachFeatureFunction
+                    }).addTo(map);
+                })
+                .catch(error => console.error('Harita verisi alınırken hata:', error));
+        }
+
+        // İlçeleri nasıl renklendireceğimizi belirleyen fonksiyon
+        function styleFunction(feature) {
+            return {
+                fillColor: feature.properties.renk || '#808080', // Renk app.py'den geliyor
+                weight: 2,
+                opacity: 1,
+                color: 'white',
+                dashArray: '3',
+                fillOpacity: 0.7
+            };
+        }
+
+        // Her ilçeye tıklandığında ne olacağını belirleyen fonksiyon
+        function onEachFeatureFunction(feature, layer) {
+            let popupContent = `<b>${feature.properties.ilce}</b>`;
+            if (feature.properties.ortalama) {
+                popupContent += `<br>Ortalama Değer: ${feature.properties.ortalama.toFixed(2)}`;
+            } else {
+                popupContent += `<br>Veri Yok`;
+            }
+            layer.bindPopup(popupContent);
+        }
+
+        // Sayfa yüklendiğinde haritayı boş olarak (sadece ilçe sınırları) çiz
+        // Başlangıçta 'sicaklik' verisi boş olacağı için sadece sınırları çizer
+        document.addEventListener('DOMContentLoaded', () => {
+            updateMap('sicaklik');
+        });
+
+        // --- Form Gönderim Yönetimi (Güncellendi) ---
         uploadForm.addEventListener('submit', function(event) {
-            event.preventDefault(); // Sayfanın yeniden yüklenmesini engelle
+            event.preventDefault();
             uploadStatus.innerText = 'Yükleniyor...';
 
             const formData = new FormData(uploadForm);
             
-            // Veriyi 'app.py'deki '/upload_data' adresine gönder
             fetch('/upload_data', {
                 method: 'POST',
                 body: formData
@@ -213,8 +227,11 @@
                 if (data.success) {
                     uploadStatus.innerText = `Başarılı: ${data.message}`;
                     uploadStatus.style.color = 'green';
-                    // İleride burada haritayı güncelleyecek kod çağrılabilir
-                    // ornegin: refreshMap(formData.get('ilce'), data.renk);
+                    
+                    // YÜKLEME BAŞARILI OLDUĞUNDA HARİTAYI GÜNCELLE (YENİ)
+                    const currentDataType = formData.get('data_type');
+                    updateMap(currentDataType);
+
                 } else {
                     uploadStatus.innerText = `Hata: ${data.error}`;
                     uploadStatus.style.color = 'red';
@@ -225,13 +242,6 @@
                 uploadStatus.style.color = 'red';
             });
         });
-
-        // --- Harita Alanı Yönetimi (Şimdilik Placeholder) ---
-        function showMap(mapType) {
-            const mapPlaceholder = document.getElementById('map-placeholder');
-            mapPlaceholder.innerText = `${mapType.toUpperCase()} Haritası alanı.\n\nGerçek harita verisi buraya yüklenecek.`;
-            console.log(`${mapType} haritası istendi.`);
-        }
     </script>
 </body>
 </html>
