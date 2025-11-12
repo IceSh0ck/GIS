@@ -2,35 +2,71 @@ from flask import Flask, render_template, request, jsonify
 import pandas as pd
 import geopandas as gpd
 import os
-import io
 
 app = Flask(__name__)
 
-# GeoJSON dosyasının yolu
-GEOJSON_PATH = 'static/ankara-ilceler.geojson'
+# --- BÜYÜK GÜNCELLEME (VERİ FİLTRELEME) ---
 
-# Ankara ilçeleri (GeoJSON'dan da alınabilir)
-ANKARA_ILCELERI = [
-    "Akyurt", "Altındağ", "Ayaş", "Bala", "Beypazarı", "Çamlıdere",
-    "Çankaya", "Çubuk", "Elmadağ", "Etimesgut", "Evren", "Gölbaşı",
-    "Güdül", "Haymana", "Kahramankazan", "Kalecik", "Keçiören", "Kızılcahamam",
-    "Mamak", "Nallıhan", "Polatlı", "Pursaklar", "Sincan", "Şereflikoçhisar", "Yenimahalle"
-]
+# GeoJSON dosyasının yolu (Artık tüm Türkiye'yi içeriyor)
+GEOJSON_PATH = 'static/turkey-ilceler.geojson'
+ANKARA_IL_ADI = "Ankara" # Filtreleyeceğimiz ilin adı
+
+# Global değişkenler (Sunucu açılırken doldurulacak)
+ankara_gdf = None
+ANKARA_ILCELERI = []
+
+def load_and_filter_map():
+    """
+    Sunucu başlarken haritayı SADECE BİR KEZ yükler,
+    Ankara'yı filtreler ve hafızaya alır.
+    """
+    global ankara_gdf, ANKARA_ILCELERI
+    
+    try:
+        print(f"Büyük harita dosyası ({GEOJSON_PATH}) yükleniyor...")
+        # 1. Tüm Türkiye haritasını yükle (Sadece 1 kez)
+        all_districts_gdf = gpd.read_file(GEOJSON_PATH)
+        
+        print(f"'{ANKARA_IL_ADI}' iline ait veriler filtreleniyor...")
+        # 2. Sadece Ankara'ya ait olanları filtrele
+        #    GeoJSON dosyasındaki il adı sütununun 'il_adi' olduğunu varsayıyoruz
+        ankara_gdf = all_districts_gdf[all_districts_gdf['il_adi'] == ANKARA_IL_ADI].copy()
+        
+        if ankara_gdf.empty:
+            print(f"HATA: '{ANKARA_IL_ADI}' için veri bulunamadı. 'il_adi' anahtarı doğru mu?")
+            return
+
+        # 3. GeoJSON'daki ilçe adı sütununu ('ad') 'ilce' adına çevir
+        if 'ad' in ankara_gdf.columns:
+            ankara_gdf = ankara_gdf.rename(columns={'ad': 'ilce'})
+        else:
+            print("HATA: GeoJSON'da 'ad' sütunu bulunamadı.")
+            return
+
+        # 4. İlçe listesini güncelle (Kontrol panelindeki <select> için)
+        ANKARA_ILCELERI = sorted(ankara_gdf['ilce'].unique())
+        
+        print(f"Başarılı: Ankara için {len(ankara_gdf)} ilçe haritası hafızaya yüklendi.")
+        print(f"Bulunan ilçeler: {ANKARA_ILCELERI}")
+
+    except Exception as e:
+        print(f"Harita yüklenirken kritik hata: {e}")
+
+# --- ESKİ KODLAR (Hafifçe Güncellendi) ---
 
 # Veritabanı yerine geçici global veri saklama alanı
-# { "sicaklik": {"Çankaya": 16.5, "Keçiören": 17.2}, "nem": {...} }
 processed_data = {
     "sicaklik": {},
     "nem": {},
     "egim": {}
 }
 
-# Ana sayfayı yükler
+# Ana sayfayı yükler (Artık ilçe listesini global değişkenden alır)
 @app.route('/')
 def index():
     return render_template('index.html', ilceler=ANKARA_ILCELERI)
 
-# CSV Yükleme ve İşleme (Sadece işler ve 'processed_data'ya kaydeder)
+# CSV Yükleme ve İşleme (Değişiklik yok)
 @app.route('/upload_data', methods=['POST'])
 def upload_data():
     try:
@@ -41,64 +77,50 @@ def upload_data():
         if not file:
             return jsonify({'success': False, 'error': 'Dosya seçilmedi.'}), 400
 
-        # CSV'yi Pandas ile oku
         df = pd.read_csv(file)
 
         if data_type == 'sicaklik':
             if 'sicaklik' not in df.columns:
                 return jsonify({'success': False, 'error': '"sicaklik" sütunu bulunamadı.'}), 400
             
-            # Ortalama hesapla
             genel_ortalama = df['sicaklik'].mean()
-            
-            # "Veritabanına" kaydet (Birden fazla dosya için mantık güncellenmeli)
             processed_data[data_type][ilce] = genel_ortalama
 
             return jsonify({
                 'success': True,
-                'message': f'{ilce} için ortalama sıcaklık {genel_ortalama:.2f} olarak kaydedildi. Haritayı güncelleyin.'
+                'message': f'{ilce} için ortalama sıcaklık {genel_ortalama:.2f} olarak kaydedildi.'
             })
         
-        # Nem ve Eğim için de benzer mantık eklenebilir
         else:
             return jsonify({'success': False, 'error': 'Bu veri tipi henüz desteklenmiyor.'})
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# === HARİTA İÇİN YENİ API ROUTE ===
-# Leaflet'in haritayı çizmek için ihtiyaç duyduğu GeoJSON verisini sağlar
+# === HARİTA İÇİN API ROUTE (Artık Çok Hızlı) ===
+# Bu fonksiyon artık hafızadaki KÜÇÜK Ankara haritasını kullanır
 @app.route('/api/get_map_data/<data_type>')
 def get_map_data(data_type):
-    try:
-        # 1. GeoJSON dosyasını GeoPandas ile oku
-        # GeoJSON'unuzdaki ilçe adının olduğu sütun adını 'ILCE_ADI' ile değiştirin
-        gdf = gpd.read_file(GEOJSON_PATH)
-        
-        # GeoJSON'daki ilçe sütun adını (örn: 'NAME_2', 'ilce_adi') 'ilce' yap
-        # BU KISMI KENDİ GEOJSON DOSYANIZA GÖRE GÜNCELLEMENİZ GEREKİR
-        # Örnek: gdf = gdf.rename(columns={'NAME_2': 'ilce'})
-        # Biz 'ilce' olduğunu varsayalım:
-        if 'ilce' not in gdf.columns:
-             # Örnek bir GeoJSON'da 'NAME' olabilir, onu 'ilce' yapalım
-             if 'NAME' in gdf.columns:
-                 gdf = gdf.rename(columns={'NAME': 'ilce'})
-             else:
-                 # Uygun sütun bulunamazsa hata ver
-                 return jsonify({"error": "GeoJSON dosyasında 'ilce' sütunu bulunamadı."}), 500
+    global ankara_gdf
+    if ankara_gdf is None:
+        return jsonify({"error": "Harita verisi sunucuda yüklenemedi."}), 500
 
+    try:
+        # 1. Hafızadaki filtrelenmiş Ankara haritasını kopyala (Çok Hızlı)
+        gdf_copy = ankara_gdf.copy()
 
         # 2. İşlenmiş verileri bir DataFrame'e dönüştür
         data_to_merge = processed_data.get(data_type, {})
         if not data_to_merge:
-            # Veri yoksa bile GeoJSON'u döndür
-            return gdf.to_json()
+            # Veri yoksa bile, renksiz haritayı döndür
+            gdf_copy['ortalama'] = pd.NA
+            gdf_copy['renk'] = '#808080' # Gri (veri yoksa)
+            return gdf_copy.to_json()
         
         df = pd.DataFrame(list(data_to_merge.items()), columns=['ilce', 'ortalama'])
 
-        # 3. GeoDataFrame (harita) ile DataFame'i (veri) birleştir
-        # GeoJSON'daki ilçe adları ile bizim ilçe adlarımızın eşleştiğinden emin olun
-        merged_gdf = gdf.merge(df, on='ilce', how='left')
+        # 3. Ankara haritası ile sıcaklık verisini birleştir
+        merged_gdf = gdf_copy.merge(df, on='ilce', how='left')
 
         # 4. Renklendirme mantığı
         def get_color(ortalama):
@@ -118,5 +140,12 @@ def get_map_data(data_type):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# --- SUNUCUYU BAŞLAT ---
 if __name__ == '__main__':
+    # Sunucu çalışmadan önce haritayı yükle VE FİLTRELE
+    load_and_filter_map()
     app.run(debug=True)
+else:
+    # OnRender gibi Gunicorn sunucuları 'app' değişkenini arar
+    # Onlar için de haritayı yükle ve filtrele
+    load_and_filter_map()
