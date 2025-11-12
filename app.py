@@ -7,56 +7,69 @@ app = Flask(__name__)
 
 # --- BÜYÜK GÜNCELLEME (VERİ FİLTRELEME) ---
 
-# 1. BÜYÜK Türkiye haritasının yolu
 GEOJSON_PATH = 'static/turkey-ilceler.geojson'
 ANKARA_IL_ADI = "Ankara" # Filtreleyeceğimiz ilin adı
 
-# 2. Sadece Ankara haritasını saklamak için global değişkenler
 ankara_gdf = None
 ANKARA_ILCELERI = []
 
 def load_and_filter_map():
     """
-    Sunucu başlarken haritayı yükler, filtreler ve hafızaya alır.
+    Sunucu başlarken haritayı yükler, AKILLI filtreleme yapar 
+    ve sonucu hafızaya alır.
     """
     global ankara_gdf, ANKARA_ILCELERI
     
     try:
-        print(f"{GEOJSON_PATH} dosyası yükleniyor...")
-        # 1. Tüm Türkiye haritasını yükle
+        print(f"Büyük harita dosyası ({GEOJSON_PATH}) yükleniyor...")
         all_districts_gdf = gpd.read_file(GEOJSON_PATH)
         
-        # --- YENİ EKLENEN HATA AYIKLAMA KODU ---
-        print("--- MEVCUT GEOJSON SÜTUNLARI ---")
-        print(list(all_districts_gdf.columns))
-        print("---------------------------------")
-        # --------------------------------------
+        # --- YENİ KONTROL 1: İL SÜTUNUNU BUL ---
+        il_sutun_adi = None
+        if 'il_adi' in all_districts_gdf.columns:
+            il_sutun_adi = 'il_adi'
+        elif 'NAME_1' in all_districts_gdf.columns:
+            il_sutun_adi = 'NAME_1'
+        else:
+            print(f"HATA: GeoJSON'da 'il_adi' veya 'NAME_1' adında bir İL sütunu bulunamadı!")
+            print(f"BULUNAN TÜM SÜTUNLAR: {list(all_districts_gdf.columns)}")
+            return # Fonksiyonu durdur
+
+        print(f"İl filtresi için '{il_sutun_adi}' sütunu kullanılacak.")
         
-        print(f"'{ANKARA_IL_ADI}' iline ait veriler filtreleniyor...")
-        # 2. Sadece Ankara'ya ait olanları filtrele
-        #    GeoJSON dosyasındaki il adı sütununun 'il_adi' olduğunu varsayıyoruz
-        ankara_gdf = all_districts_gdf[all_districts_gdf['il_adi'] == ANKARA_IL_ADI].copy()
+        # --- Filtreleme ---
+        ankara_gdf = all_districts_gdf[all_districts_gdf[il_sutun_adi] == ANKARA_IL_ADI].copy()
         
         if ankara_gdf.empty:
-            print(f"HATA: '{ANKARA_IL_ADI}' için veri bulunamadı. 'il_adi' anahtarı doğru mu?")
+            print(f"HATA: '{ANKARA_IL_ADI}' için veri bulunamadı. '{il_sutun_adi}' sütunu doğru mu?")
             return
 
-        # 5. GeoJSON'daki ilçe adı sütununu ('ad') 'ilce' adına çevir
+        # --- YENİ KONTROL 2: İLÇE SÜTUNUNU BUL ---
+        ilce_sutun_adi = None
         if 'ad' in ankara_gdf.columns:
-            ankara_gdf = ankara_gdf.rename(columns={'ad': 'ilce'})
+            ilce_sutun_adi = 'ad'
+        elif 'NAME_2' in ankara_gdf.columns:
+            ilce_sutun_adi = 'NAME_2'
         else:
-            print("HATA: GeoJSON'da 'ad' sütunu bulunamadı.")
-            return
+            print(f"HATA: GeoJSON'da 'ad' veya 'NAME_2' adında bir İLÇE sütunu bulunamadı!")
+            print(f"BULUNAN TÜM SÜTUNLAR: {list(ankara_gdf.columns)}")
+            return # Fonksiyonu durdur
+        
+        print(f"İlçe adları için '{ilce_sutun_adi}' sütunu kullanılacak.")
 
-        # 6. İlçe listesini güncelle (Kontrol panelindeki <select> için)
+        # --- Sütun adını standart 'ilce' adına çevir ---
+        ankara_gdf = ankara_gdf.rename(columns={ilce_sutun_adi: 'ilce'})
+
+        # --- İlçe listesini güncelle (Kontrol panelindeki <select> için) ---
         ANKARA_ILCELERI = sorted(ankara_gdf['ilce'].unique())
         
         print(f"Başarılı: Ankara için {len(ankara_gdf)} ilçe haritası hafızaya yüklendi.")
+        print(f"Bulunan ilçeler: {ANKARA_ILCELERI}")
 
     except Exception as e:
         print(f"Harita yüklenirken kritik hata: {e}")
 
-# --- KODUN GERİ KALANI ---
+# --- KODUN GERİ KALANI (Değişiklik Yok) ---
 
 # Veritabanı yerine geçici global veri saklama alanı
 processed_data = {
@@ -65,7 +78,7 @@ processed_data = {
     "egim": {}
 }
 
-# Ana sayfayı yükler (Artık ilçe listesini global değişkenden alır)
+# Ana sayfayı yükler
 @app.route('/')
 def index():
     return render_template('index.html', ilceler=ANKARA_ILCELERI)
@@ -109,23 +122,17 @@ def get_map_data(data_type):
         return jsonify({"error": "Harita verisi sunucuda yüklenemedi."}), 500
 
     try:
-        # 1. Hafızadaki filtrelenmiş Ankara haritasını kopyala (Çok Hızlı)
         gdf_copy = ankara_gdf.copy()
-
-        # 2. İşlenmiş verileri bir DataFrame'e dönüştür
         data_to_merge = processed_data.get(data_type, {})
+        
         if not data_to_merge:
-            # Veri yoksa bile, renksiz ANKARA haritasını döndür
             gdf_copy['ortalama'] = pd.NA
-            gdf_copy['renk'] = '#808080' # Gri (veri yoksa)
+            gdf_copy['renk'] = '#808080' 
             return gdf_copy.to_json()
         
         df = pd.DataFrame(list(data_to_merge.items()), columns=['ilce', 'ortalama'])
-
-        # 3. Ankara haritası ile sıcaklık verisini birleştir
         merged_gdf = gdf_copy.merge(df, on='ilce', how='left')
 
-        # 4. Renklendirme mantığı
         def get_color(ortalama):
             if pd.isna(ortalama):
                 return '#808080'  # Gri (veri yoksa)
@@ -137,7 +144,6 @@ def get_map_data(data_type):
 
         merged_gdf['renk'] = merged_gdf['ortalama'].apply(get_color)
         
-        # 5. Sadece renklendirilmiş ANKARA haritasını tarayıcıya yolla
         return merged_gdf.to_json()
 
     except Exception as e:
@@ -145,10 +151,8 @@ def get_map_data(data_type):
 
 # --- SUNUCUYU BAŞLAT ---
 if __name__ == '__main__':
-    # Sunucu çalışmadan önce haritayı yükle VE FİLTRELE
     load_and_filter_map()
     app.run(debug=True)
 else:
     # OnRender (Gunicorn) için de haritayı yükle ve filtrele
     load_and_filter_map()
-
