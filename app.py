@@ -17,18 +17,24 @@ ANKARA_ILCELERI = []
 
 def load_and_filter_map():
     """
-    Sunucu başlarken haritayı SADECE BİR KEZ yükler,
-    Ankara'yı filtreler ve sonucu hafızaya alır.
+    Sunucu başlarken haritayı yükler, filtreler ve hafızaya alır.
     """
     global ankara_gdf, ANKARA_ILCELERI
     
     try:
-        print(f"Büyük harita dosyası ({GEOJSON_PATH}) yükleniyor...")
-        # 3. Tüm Türkiye haritasını yükle (Sadece sunucu açılırken 1 kez)
+        print(f"{GEOJSON_PATH} dosyası yükleniyor...")
+        # 1. Tüm Türkiye haritasını yükle
         all_districts_gdf = gpd.read_file(GEOJSON_PATH)
         
+        # --- YENİ EKLENEN HATA AYIKLAMA KODU ---
+        print("--- MEVCUT GEOJSON SÜTUNLARI ---")
+        print(list(all_districts_gdf.columns))
+        print("---------------------------------")
+        # --------------------------------------
+        
         print(f"'{ANKARA_IL_ADI}' iline ait veriler filtreleniyor...")
-        # 4. Sadece 'il_adi' sütunu "Ankara" olanları filtrele
+        # 2. Sadece Ankara'ya ait olanları filtrele
+        #    GeoJSON dosyasındaki il adı sütununun 'il_adi' olduğunu varsayıyoruz
         ankara_gdf = all_districts_gdf[all_districts_gdf['il_adi'] == ANKARA_IL_ADI].copy()
         
         if ankara_gdf.empty:
@@ -145,3 +151,4 @@ if __name__ == '__main__':
 else:
     # OnRender (Gunicorn) için de haritayı yükle ve filtrele
     load_and_filter_map()
+
