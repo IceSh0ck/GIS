@@ -35,7 +35,7 @@
         #map { 
             width: 100%; 
             height: 100vh; 
-            background-color: #e0e0e0; /* Parçalı harita yerine düz gri arka plan */
+            background-color: #f0f0f0; /* Arka plan rengi */
         }
         .control-panel-toggle {
             position: fixed;
@@ -137,13 +137,13 @@
 
         // --- HARİTA YÖNETİMİ (GÜNCELLENDİ) ---
         
-        // 1. Ankara için sınırlar
+        // 1. Ankara için sınırlar (Değişmedi)
         const ankaraBounds = L.latLngBounds(
             [39.4, 32.0], // Güney-Batı köşesi
             [40.5, 33.7]  // Kuzey-Doğu köşesi
         );
 
-        // 2. Haritayı KISITLAMALARLA başlat
+        // 2. Haritayı KISITLAMALARLA başlat (Değişmedi)
         const map = L.map('map', {
             center: [39.93, 32.85],    
             zoom: 9,                   
@@ -153,8 +153,14 @@
             maxBoundsViscosity: 1.0    
         });
 
-        // 3. Temel harita katmanı (OpenStreetMap) SİLİNDİ
-        // L.tileLayer('...').addTo(map); <-- BU SATIR KALDIRILDI
+        // 3. Temel harita katmanı (GÜNCELLENDİ)
+        // 'Parçalı' görüntü veren OpenStreetMap yerine hızlı CartoDB sağlayıcısı
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            minZoom: 9,
+            maxZoom: 14
+        }).addTo(map);
 
         // Mevcut ilçe katmanını saklamak için global değişken
         let geojsonLayer = null;
