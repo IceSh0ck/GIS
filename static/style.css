@@ -1,1 +1,125 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
 
+#map {
+    height: 100%;
+    width: 100%;
+    z-index: 1;
+}
+
+.map-controls {
+    position: absolute;
+    top: 10px;
+    left: 50px;
+    z-index: 1000;
+    background: white;
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.map-controls button {
+    margin: 0 5px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+/* --- Kontrol Paneli --- */
+.admin-panel-toggle {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    background: #007bff;
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.admin-panel-container {
+    position: absolute;
+    right: -350px; /* Başlangıçta gizli */
+    top: 0;
+    width: 330px;
+    height: 100vh;
+    background: #f9f9f9;
+    z-index: 999;
+    box-shadow: -3px 0 10px rgba(0,0,0,0.2);
+    transition: right 0.3s ease-in-out;
+    padding: 10px 20px;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.admin-panel-container.open {
+    right: 0; /* Açıkken */
+}
+
+/* Panel İçi Tablar */
+.tab-buttons {
+    display: flex;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 15px;
+}
+
+.tab-link {
+    padding: 10px 15px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-size: 1em;
+}
+
+.tab-link.active {
+    font-weight: bold;
+    border-bottom: 3px solid #007bff;
+}
+
+.tab-content {
+    display: none; /* Başlangıçta tüm içerikler gizli */
+}
+
+.tab-content.active {
+    display: block; /* Sadece aktif olan görünür */
+}
+
+/* Form Elemanları */
+#sicaklik-form {
+    display: flex;
+    flex-direction: column;
+}
+
+#sicaklik-form label {
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+#sicaklik-form select,
+#sicaklik-form input[type="file"],
+#sicaklik-form button {
+    margin-top: 5px;
+    padding: 8px;
+    font-size: 0.9em;
+}
+
+#sicaklik-form button {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    cursor: pointer;
+    margin-top: 20px;
+}
+
+.status-message {
+    margin-top: 15px;
+    font-size: 0.9em;
+    font-weight: bold;
+}
