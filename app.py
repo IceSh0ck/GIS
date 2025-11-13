@@ -15,7 +15,9 @@ processed_data = {
 ANKARA_ILCELERI = [] 
 JSON_LIST_PATH = os.path.join('static', 'il-ilce-listesi.json')
 ankara_gdf = None 
-GEOJSON_MAP_PATH = os.path.join('static', 'İlçe_Sınırı.shp')
+
+# --- GÜNCELLEME 1: Dosya yolu değişti ---
+GEOJSON_MAP_PATH = os.path.join('static', 'ilce_siniri.shp') # 'İlçe_Sınırı.shp' DEĞİL!
 
 def load_district_list_from_json():
     """MENÜ için ilçe listesini JSON'dan okur"""
@@ -39,11 +41,9 @@ def load_map_file():
     try:
         print(f"Ankara haritası ({GEOJSON_MAP_PATH}) yükleniyor...")
         
-        # --- DÜZELTME BURADA ---
-        # Shapefile'daki Türkçe karakterleri (Ç, Ş, Ğ) okuyabilmek için
-        # 'latin5' veya 'ISO-8859-9' kodlamasını ekliyoruz.
-        ankara_gdf = gpd.read_file(GEOJSON_MAP_PATH, encoding='ISO-8859-9')
-        # -------------------------
+        # --- GÜNCELLEME 2: Türkçe Karakter Kodlaması Eklendi ---
+        # HGM verileri genellikle 'ISO-8859-9' veya 'latin5' kullanır
+        ankara_gdf = gpd.read_file(GEOJSON_MAP_PATH, encoding='latin5')
         
         ilce_sutun_adi = None
         if 'ilce_adi' in ankara_gdf.columns: ilce_sutun_adi = 'ilce_adi'
@@ -58,10 +58,7 @@ def load_map_file():
 
         print(f"Harita için '{ilce_sutun_adi}' sütunu ilçe adı olarak kullanılacak.")
         
-        # Haritadaki ilçe adlarını temizle ve standart 'ilce' sütununa ata
         ankara_gdf['ilce'] = ankara_gdf[ilce_sutun_adi].astype(str).str.strip()
-        
-        # Web haritalarıyla uyumlu Koordinat Referans Sistemine (CRS) dönüştür
         ankara_gdf = ankara_gdf.to_crs(epsg=4326)
         
         print(f"Başarılı: {len(ankara_gdf)} ilçelik harita şekli yüklendi.")
@@ -81,17 +78,18 @@ def load_map_file():
 
     except FileNotFoundError:
         print(f"HATA: Harita dosyası '{GEOJSON_MAP_PATH}' bulunamadı!")
+        print("Lütfen dosya adını 'ilce_siniri.shp' olarak değiştirdiğinizden emin olun.")
     except Exception as e:
         print(f".shp haritası yüklenirken kritik hata: {e}")
         print("Not: 'fiona' veya 'pyproj' kütüphaneleri eksik olabilir.")
 
 
-# --- Ana Sayfa ---
+# --- (Kodun geri kalanı değişmedi) ---
+
 @app.route('/')
 def index():
     return render_template('index.html', ilceler=ANKARA_ILCELERI)
 
-# --- Veri Yükleme (Değişiklik Yok) ---
 @app.route('/upload_data', methods=['POST'])
 def upload_data():
     global processed_data
@@ -124,7 +122,6 @@ def upload_data():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# --- Harita Veri API'si (Değişiklik Yok) ---
 @app.route('/api/get_map_data/<data_type>')
 def get_map_data(data_type):
     global ankara_gdf, processed_data
