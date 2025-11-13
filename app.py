@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 import pandas as pd
-import geopandas as gpd # Harita işlemleri için GEREKLİ
+import geopandas as gpd 
 import os
 import json 
 
@@ -12,18 +12,10 @@ processed_data = {
     "nem": {},
     "egim": {}
 }
-
-# --- Hafıza (Menü Listesi) ---
 ANKARA_ILCELERI = [] 
 JSON_LIST_PATH = os.path.join('static', 'il-ilce-listesi.json')
-
-# --- Hafıza (Harita Şekli) ---
 ankara_gdf = None 
-# --- GÜNCELLEME BURADA ---
-# Dosya adını 'İlçe_Sınırı.shp' olarak değiştirdik
 GEOJSON_MAP_PATH = os.path.join('static', 'İlçe_Sınırı.shp')
-# -------------------------
-
 
 def load_district_list_from_json():
     """MENÜ için ilçe listesini JSON'dan okur"""
@@ -46,11 +38,13 @@ def load_map_file():
     global ankara_gdf
     try:
         print(f"Ankara haritası ({GEOJSON_MAP_PATH}) yükleniyor...")
-        # geopandas .shp dosyasını doğrudan okur
-        ankara_gdf = gpd.read_file(GEOJSON_MAP_PATH) 
         
-        # Harita dosyasındaki (.dbf) ilçe sütununu bulmamız lazım
-        # (Bu adları kontrol et, .dbf dosyasında farklı olabilirler)
+        # --- DÜZELTME BURADA ---
+        # Shapefile'daki Türkçe karakterleri (Ç, Ş, Ğ) okuyabilmek için
+        # 'latin5' veya 'ISO-8859-9' kodlamasını ekliyoruz.
+        ankara_gdf = gpd.read_file(GEOJSON_MAP_PATH, encoding='ISO-8859-9')
+        # -------------------------
+        
         ilce_sutun_adi = None
         if 'ilce_adi' in ankara_gdf.columns: ilce_sutun_adi = 'ilce_adi'
         elif 'AD' in ankara_gdf.columns: ilce_sutun_adi = 'AD'
@@ -64,8 +58,7 @@ def load_map_file():
 
         print(f"Harita için '{ilce_sutun_adi}' sütunu ilçe adı olarak kullanılacak.")
         
-        # Haritadaki ilçe adlarını temizle (boşluk vs.) ve standart 'ilce' sütununa ata
-        # ÖNEMLİ: Shapefile'daki Türkçe karakter kodlaması sorunluysa burada hata verebilir.
+        # Haritadaki ilçe adlarını temizle ve standart 'ilce' sütununa ata
         ankara_gdf['ilce'] = ankara_gdf[ilce_sutun_adi].astype(str).str.strip()
         
         # Web haritalarıyla uyumlu Koordinat Referans Sistemine (CRS) dönüştür
@@ -85,15 +78,12 @@ def load_map_file():
         
         if not menu_ilceleri.intersection(harita_ilceleri):
             print("KRİTİK HATA: Menüdeki ilçe adları (örn: 'Çankaya') ile haritadaki ilçe adları (örn: 'CANKAYA') HİÇ EŞLEŞMİYOR!")
-            print("Lütfen harita .dbf dosyasındaki ilçe adlarını kontrol edin.")
-
 
     except FileNotFoundError:
         print(f"HATA: Harita dosyası '{GEOJSON_MAP_PATH}' bulunamadı!")
-        print("Lütfen 'İlçe_Sınırı.shp' ve .dbf, .shx gibi diğer dosyaların static klasöründe olduğundan emin olun.")
     except Exception as e:
         print(f".shp haritası yüklenirken kritik hata: {e}")
-        print("Not: 'fiona' veya 'pyproj' kütüphaneleri eksik olabilir. 'pip install geopandas' ile kurduğunuzdan emin olun.")
+        print("Not: 'fiona' veya 'pyproj' kütüphaneleri eksik olabilir.")
 
 
 # --- Ana Sayfa ---
@@ -106,7 +96,7 @@ def index():
 def upload_data():
     global processed_data
     try:
-        data_type = request.form['data_type']  # (sicaklik, nem, egim)
+        data_type = request.form['data_type']  
         ilce = request.form['ilce']
         file = request.files['file']
 
@@ -145,7 +135,7 @@ def get_map_data(data_type):
 
     try:
         gdf_copy = ankara_gdf.copy()
-        varsayilan_renk = '#808080' # Gri (Veri Yok)
+        varsayilan_renk = '#808080'
         
         if data_type in processed_data:
             data_to_merge = processed_data[data_type]
@@ -155,25 +145,25 @@ def get_map_data(data_type):
             if data_type == 'sicaklik':
                 def get_color(ortalama):
                     if pd.isna(ortalama): return varsayilan_renk
-                    if ortalama > 17: return '#FF0000' # Kırmızı
-                    if ortalama > 15: return '#FFFF00' # Sarı
-                    return '#0000FF' # Mavi
+                    if ortalama > 17: return '#FF0000'
+                    if ortalama > 15: return '#FFFF00'
+                    return '#0000FF'
                 merged_gdf['renk'] = merged_gdf['ortalama'].apply(get_color)
 
             elif data_type == 'nem':
                 def get_color(ortalama):
                     if pd.isna(ortalama): return varsayilan_renk
-                    if ortalama > 70: return '#0000FF' # Mavi (Çok Nemli)
-                    if ortalama > 50: return '#00FF00' # Yeşil (Orta)
-                    return '#FFFF00' # Sarı (Az Nemli)
+                    if ortalama > 70: return '#0000FF'
+                    if ortalama > 50: return '#00FF00'
+                    return '#FFFF00'
                 merged_gdf['renk'] = merged_gdf['ortalama'].apply(get_color)
                 
             elif data_type == 'egim':
                 def get_color(ortalama):
                     if pd.isna(ortalama): return varsayilan_renk
-                    if ortalama > 20: return '#FF0000' # Kırmızı (Çok Eğimli)
-                    if ortalama > 10: return '#FFFF00' # Sarı (Orta)
-                    return '#00FF00' # Yeşil (Az Eğimli)
+                    if ortalama > 20: return '#FF0000'
+                    if ortalama > 10: return '#FFFF00'
+                    return '#00FF00'
                 merged_gdf['renk'] = merged_gdf['ortalama'].apply(get_color)
             
             else:
@@ -199,9 +189,9 @@ def get_map_data(data_type):
                 if n < 60: score += 1
                 if e < 10: score += 1
                 
-                if score == 3: return '#00FF00' # Yeşil (Çok Uygun)
-                if score == 2: return '#FFFF00' # Sarı (Orta Uygun)
-                return '#FF0000' # Kırmızı (Uygun Değil)
+                if score == 3: return '#00FF00'
+                if score == 2: return '#FFFF00'
+                return '#FF0000'
             
             merged_gdf['renk'] = merged_gdf.apply(get_toplama_color, axis=1)
             merged_gdf['ortalama'] = pd.NA 
