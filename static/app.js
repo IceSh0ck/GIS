@@ -9,11 +9,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let ankaraLayer; 
     let sicaklikData = {}; 
 
-    // --- 2. Haritayı Boyamak İçin Stil Fonksiyonu ---
+    // --- 2. Stil Fonksiyonu (Değişiklik yok) ---
     function getStyle(feature) {
-        // NOT: Buradaki 'NAME_3' özelliği, kullandığınız GeoJSON dosyasına göre değişebilir.
-        const districtName = feature.properties.NAME_3; 
-        
+        const districtName = feature.properties.NAME_3; // (Dosyaya göre 'ilce_adi' vb. olabilir)
         const color = sicaklikData[districtName] || '#999999'; 
         return {
             fillColor: color,
@@ -25,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 3. Ana Harita Verisi Yükleme Fonksiyonu ---
     async function loadMapData() {
         try {
-            // 1. Adım: Backend'den mevcut boyama verilerini al
+            // 1. Adım: Backend'den mevcut boyama verilerini al (Aynı)
             const dataResponse = await fetch('/get_data');
             const allData = await dataResponse.json();
             sicaklikData = allData.sicaklik || {};
@@ -33,37 +31,36 @@ document.addEventListener('DOMContentLoaded', () => {
             // ==========================================================
             // DEĞİŞİKLİK BURADA
             // ==========================================================
-            // 2. Adım: GeoJSON'u API yerine GitHub Release'den yükle
+            // 2. Adım: GeoJSON'u GitHub yerine kendi backend'imizdeki proxy'den yükle
             
-            // 1. Adımda kopyaladığınız GitHub linkini bu tırnakların arasına yapıştırın
-            const geoJsonUrl = 'https://github.com/IceSh0ck/GIS/releases/tag/v1.0-data';
+            // Eski satır: const geoJsonUrl = 'https://github.com/...';
+            // Eski satır: const geoJsonResponse = await fetch(geoJsonUrl);
             
-            // Eski satır: const geoJsonResponse = await fetch('/turkey-districts.geojson');
-            const geoJsonResponse = await fetch(geoJsonUrl); // Yeni satır
+            // Yeni satır:
+            const geoJsonResponse = await fetch('/get_map_data_from_github');
             
             if (!geoJsonResponse.ok) {
-                throw new Error('Harita dosyası GitHub Release\'den yüklenemedi. URL\'yi kontrol edin.');
+                // app.py'den gelen hata mesajını al
+                const errorData = await geoJsonResponse.json();
+                throw new Error(errorData.error || 'Harita dosyası backend\'den çekilemedi.');
             }
             // ==========================================================
             
             const allDistricts = await geoJsonResponse.json();
 
-            // 3. Adım: Haritada eski katman varsa kaldır
+            // 3. Adım: Haritada eski katman varsa kaldır (Aynı)
             if (ankaraLayer) {
                 map.removeLayer(ankaraLayer);
             }
             
-            // 4. Adım: GeoJSON'u haritaya ekle (FİLTRELİ)
+            // 4. Adım: GeoJSON'u haritaya ekle (FİLTRELİ - Aynı)
             ankaraLayer = L.geoJson(allDistricts, { 
                 
                 filter: function(feature) {
-                    // NOT: 'NAME_1' özelliği de dosyaya göre değişebilir
                     const provinceName = feature.properties.NAME_1; 
                     return provinceName === "Ankara";
                 },
-
                 style: getStyle,
-                
                 onEachFeature: (feature, layer) => {
                     const districtName = feature.properties.NAME_3; 
                     layer.bindPopup(districtName); 
@@ -76,11 +73,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- 4. Sayfa Yüklendiğinde Haritayı İlk Kez Yükle ---
+    // --- 4. Sayfa Yüklendiğinde Haritayı İlk Kez Yükle (Aynı) ---
     loadMapData();
 
     // --- 5, 6, 7 (Panel, Tab ve Form mantığı) ---
-    // Bu kısımlarda hiçbir değişiklik yok.
+    // Bu kısımlarda hiçbir değişiklik yok. Tamamen aynı.
     
     const toggleBtn = document.getElementById('admin-toggle-btn');
     const adminPanel = document.getElementById('admin-panel');
