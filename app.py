@@ -1,58 +1,107 @@
 from flask import Flask, render_template, request, jsonify
 import pandas as pd
+import geopandas as gpd # Harita işlemleri için GEREKLİ
 import os
-import json # JSON dosyasını okumak için eklendi
+import json 
 
 app = Flask(__name__)
 
 # --- Sunucu Hafızası ---
-# Yüklenen verileri (Sıcaklık, Nem, Eğim) burada saklayacağız
 processed_data = {
-    "sicaklik": {}, # örn: {"Çankaya": 15.5, "Akyurt": 16.2}
+    "sicaklik": {}, 
     "nem": {},
     "egim": {}
 }
 
-# --- İlçe Listesi (Artık JSON'dan Okunacak) ---
-ANKARA_ILCELERI = [] # Başlangıçta boş
+# --- Hafıza (Menü Listesi) ---
+ANKARA_ILCELERI = [] 
+JSON_LIST_PATH = os.path.join('static', 'il-ilce-listesi.json')
+
+# --- Hafıza (Harita Şekli) ---
+ankara_gdf = None 
+# --- GÜNCELLEME BURADA ---
+# Dosya adını 'İlçe_Sınırı.shp' olarak değiştirdik
+GEOJSON_MAP_PATH = os.path.join('static', 'İlçe_Sınırı.shp')
+# -------------------------
+
 
 def load_district_list_from_json():
-    """
-    Haritadan bağımsız olarak, SADECE menü için
-    'static/il-ilce-listesi.json' dosyasından Ankara ilçelerini okur.
-    """
+    """MENÜ için ilçe listesini JSON'dan okur"""
     global ANKARA_ILCELERI
-    json_path = os.path.join('static', 'il-ilce-listesi.json')
-    
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
+        with open(JSON_LIST_PATH, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            
             if "Ankara" in data:
-                # JSON'dan listeyi al
                 ANKARA_ILCELERI = sorted(data["Ankara"])
-                
-                # Not: JSON listende "Kazan" var, haritalarda genelde "Kahramankazan" olur.
-                # Şimdilik JSON'daki listeyi birebir kullanıyoruz.
-                # (Eğer harita dosyasındaki ad "Kahramankazan" ise burayı düzeltmemiz gerekecek)
-                
                 print(f"Başarılı: Menü için {len(ANKARA_ILCELERI)} ilçe JSON'dan yüklendi.")
             else:
-                print(f"HATA: '{json_path}' dosyasında 'Ankara' anahtarı bulunamadı.")
-    
+                print(f"HATA: '{JSON_LIST_PATH}' dosyasında 'Ankara' anahtarı bulunamadı.")
     except FileNotFoundError:
-        print(f"HATA: '{json_path}' dosyası bulunamadı!")
-        print("Lütfen bir önceki mesajdaki JSON listesini bu yola kaydettiğinizden emin olun.")
+        print(f"HATA: Menü listesi '{JSON_LIST_PATH}' dosyası bulunamadı!")
     except Exception as e:
-        print(f"JSON yüklenirken kritik hata: {e}")
+        print(f"Menü JSON yüklenirken hata: {e}")
 
-# Ana sayfayı yükler ve ilçe listesini HTML'e gönderir
+def load_map_file():
+    """HARİTA için ilçe şekillerini .shp dosyasından okur"""
+    global ankara_gdf
+    try:
+        print(f"Ankara haritası ({GEOJSON_MAP_PATH}) yükleniyor...")
+        # geopandas .shp dosyasını doğrudan okur
+        ankara_gdf = gpd.read_file(GEOJSON_MAP_PATH) 
+        
+        # Harita dosyasındaki (.dbf) ilçe sütununu bulmamız lazım
+        # (Bu adları kontrol et, .dbf dosyasında farklı olabilirler)
+        ilce_sutun_adi = None
+        if 'ilce_adi' in ankara_gdf.columns: ilce_sutun_adi = 'ilce_adi'
+        elif 'AD' in ankara_gdf.columns: ilce_sutun_adi = 'AD'
+        elif 'NAME' in ankara_gdf.columns: ilce_sutun_adi = 'NAME'
+        elif 'ilce' in ankara_gdf.columns: ilce_sutun_adi = 'ilce'
+        elif 'NAME_2' in ankara_gdf.columns: ilce_sutun_adi = 'NAME_2'
+        else:
+            print(f"HATA: Shapefile (.dbf) içinde ilçe sütunu bulunamadı.")
+            print(f"Bulunan sütunlar: {list(ankara_gdf.columns)}")
+            return
+
+        print(f"Harita için '{ilce_sutun_adi}' sütunu ilçe adı olarak kullanılacak.")
+        
+        # Haritadaki ilçe adlarını temizle (boşluk vs.) ve standart 'ilce' sütununa ata
+        # ÖNEMLİ: Shapefile'daki Türkçe karakter kodlaması sorunluysa burada hata verebilir.
+        ankara_gdf['ilce'] = ankara_gdf[ilce_sutun_adi].astype(str).str.strip()
+        
+        # Web haritalarıyla uyumlu Koordinat Referans Sistemine (CRS) dönüştür
+        ankara_gdf = ankara_gdf.to_crs(epsg=4326)
+        
+        print(f"Başarılı: {len(ankara_gdf)} ilçelik harita şekli yüklendi.")
+        
+        # Eşleşme Kontrolü
+        menu_ilceleri = set(ANKARA_ILCELERI)
+        harita_ilceleri = set(ankara_gdf['ilce'])
+        
+        fark_menude_var = menu_ilceleri - harita_ilceleri
+        fark_haritada_var = harita_ilceleri - menu_ilceleri
+        
+        if fark_menude_var: print(f"UYARI (Eşleşme Sorunu): Menüde olup haritada olmayan ilçeler: {fark_menude_var}")
+        if fark_haritada_var: print(f"UYARI (Eşleşme Sorunu): Haritada olup menüde olmayan ilçeler: {fark_haritada_var}")
+        
+        if not menu_ilceleri.intersection(harita_ilceleri):
+            print("KRİTİK HATA: Menüdeki ilçe adları (örn: 'Çankaya') ile haritadaki ilçe adları (örn: 'CANKAYA') HİÇ EŞLEŞMİYOR!")
+            print("Lütfen harita .dbf dosyasındaki ilçe adlarını kontrol edin.")
+
+
+    except FileNotFoundError:
+        print(f"HATA: Harita dosyası '{GEOJSON_MAP_PATH}' bulunamadı!")
+        print("Lütfen 'İlçe_Sınırı.shp' ve .dbf, .shx gibi diğer dosyaların static klasöründe olduğundan emin olun.")
+    except Exception as e:
+        print(f".shp haritası yüklenirken kritik hata: {e}")
+        print("Not: 'fiona' veya 'pyproj' kütüphaneleri eksik olabilir. 'pip install geopandas' ile kurduğunuzdan emin olun.")
+
+
+# --- Ana Sayfa ---
 @app.route('/')
 def index():
-    # Artık ANKARA_ILCELERI listesi JSON'dan dolu olmalı
     return render_template('index.html', ilceler=ANKARA_ILCELERI)
 
-# GÜNCELLENDİ: Tüm 3 veri tipini de işler ve hafızaya kaydeder
+# --- Veri Yükleme (Değişiklik Yok) ---
 @app.route('/upload_data', methods=['POST'])
 def upload_data():
     global processed_data
@@ -64,27 +113,18 @@ def upload_data():
         if not file:
             return jsonify({'success': False, 'error': 'Dosya seçilmedi.'}), 400
         
-        # Gelen veri tipinin (sicaklik, nem, egim) bizim hafızamızda yeri var mı?
         if data_type not in processed_data:
             return jsonify({'success': False, 'error': 'Geçersiz veri tipi.'}), 400
 
         df = pd.read_csv(file)
 
-        # CSV'de 'data_type' ile aynı isimde sütun arayacağız
-        # (Yani 'sicaklik.csv'de 'sicaklik' sütunu, 'nem.csv'de 'nem' sütunu olmalı)
         if data_type not in df.columns:
             return jsonify({'success': False, 'error': f'CSV dosyanızda "{data_type}" adında bir sütun bulunamadı.'}), 400
 
-        # Ortalama değeri hesapla
         ortalama_deger = df[data_type].mean()
-
-        # Değeri sunucu hafızasına kaydet
-        # örn: processed_data['sicaklik']['Çankaya'] = 15.5
         processed_data[data_type][ilce] = ortalama_deger
 
         print(f"KAYIT: Tür={data_type}, İlçe={ilce}, Ortalama={ortalama_deger}")
-        # Hafızanın son halini görmek için:
-        # print(f"Tüm Veri: {processed_data}")
 
         return jsonify({
             'success': True,
@@ -94,10 +134,94 @@ def upload_data():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# --- Sunucuyu Başlat ---
+# --- Harita Veri API'si (Değişiklik Yok) ---
+@app.route('/api/get_map_data/<data_type>')
+def get_map_data(data_type):
+    global ankara_gdf, processed_data
+    
+    if ankara_gdf is None:
+        print("API Hatası: Harita hafızaya yüklenememiş (ankara_gdf is None).")
+        return jsonify({"error": "Harita verisi sunucuda yüklenemedi. .shp dosyasını kontrol edin."}), 500
+
+    try:
+        gdf_copy = ankara_gdf.copy()
+        varsayilan_renk = '#808080' # Gri (Veri Yok)
+        
+        if data_type in processed_data:
+            data_to_merge = processed_data[data_type]
+            df = pd.DataFrame(list(data_to_merge.items()), columns=['ilce', 'ortalama'])
+            merged_gdf = gdf_copy.merge(df, on='ilce', how='left')
+
+            if data_type == 'sicaklik':
+                def get_color(ortalama):
+                    if pd.isna(ortalama): return varsayilan_renk
+                    if ortalama > 17: return '#FF0000' # Kırmızı
+                    if ortalama > 15: return '#FFFF00' # Sarı
+                    return '#0000FF' # Mavi
+                merged_gdf['renk'] = merged_gdf['ortalama'].apply(get_color)
+
+            elif data_type == 'nem':
+                def get_color(ortalama):
+                    if pd.isna(ortalama): return varsayilan_renk
+                    if ortalama > 70: return '#0000FF' # Mavi (Çok Nemli)
+                    if ortalama > 50: return '#00FF00' # Yeşil (Orta)
+                    return '#FFFF00' # Sarı (Az Nemli)
+                merged_gdf['renk'] = merged_gdf['ortalama'].apply(get_color)
+                
+            elif data_type == 'egim':
+                def get_color(ortalama):
+                    if pd.isna(ortalama): return varsayilan_renk
+                    if ortalama > 20: return '#FF0000' # Kırmızı (Çok Eğimli)
+                    if ortalama > 10: return '#FFFF00' # Sarı (Orta)
+                    return '#00FF00' # Yeşil (Az Eğimli)
+                merged_gdf['renk'] = merged_gdf['ortalama'].apply(get_color)
+            
+            else:
+                 merged_gdf['renk'] = varsayilan_renk
+
+        elif data_type == 'toplama':
+            sicaklik_df = pd.DataFrame(list(processed_data['sicaklik'].items()), columns=['ilce', 'sicaklik'])
+            nem_df = pd.DataFrame(list(processed_data['nem'].items()), columns=['ilce', 'nem'])
+            egim_df = pd.DataFrame(list(processed_data['egim'].items()), columns=['ilce', 'egim'])
+            
+            merged_gdf = gdf_copy.merge(sicaklik_df, on='ilce', how='left')
+            merged_gdf = merged_gdf.merge(nem_df, on='ilce', how='left')
+            merged_gdf = merged_gdf.merge(egim_df, on='ilce', how='left')
+
+            def get_toplama_color(row):
+                s, n, e = row['sicaklik'], row['nem'], row['egim']
+                
+                if pd.isna(s) or pd.isna(n) or pd.isna(e):
+                    return varsayilan_renk
+
+                score = 0
+                if s > 15: score += 1
+                if n < 60: score += 1
+                if e < 10: score += 1
+                
+                if score == 3: return '#00FF00' # Yeşil (Çok Uygun)
+                if score == 2: return '#FFFF00' # Sarı (Orta Uygun)
+                return '#FF0000' # Kırmızı (Uygun Değil)
+            
+            merged_gdf['renk'] = merged_gdf.apply(get_toplama_color, axis=1)
+            merged_gdf['ortalama'] = pd.NA 
+
+        else:
+            merged_gdf = gdf_copy
+            merged_gdf['renk'] = varsayilan_renk
+            merged_gdf['ortalama'] = pd.NA
+        
+        return merged_gdf.to_json()
+
+    except Exception as e:
+        print(f"API Hatası (/get_map_data): {e}")
+        return jsonify({"error": str(e)}), 500
+
+# --- SUNUCUYU BAŞLAT ---
 if __name__ == '__main__':
-    load_district_list_from_json() # Sunucu başlarken menü listesini yükle
+    load_district_list_from_json() # 1. Menü listesini yükle
+    load_map_file()                # 2. Harita şeklini yükle
     app.run(debug=True)
 else:
-    # Render.com (Gunicorn) için de listeyi yükle
     load_district_list_from_json()
+    load_map_file()
