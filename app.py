@@ -20,7 +20,7 @@ def get_map_data_from_github():
     """
     
     # 1. Adımda kopyaladığınız GitHub Release linkini buraya yapıştırın
-    github_url = 'https://github.com/IceSh0ck/GIS/releases/tag/v1.0-data'
+    github_url = 'https://github.com/IceSh0ck/GIS/releases/download/v1.0-data/turkey-admin-level-6.geojson'
     
     try:
         # Python sunucusu GitHub'dan veriyi çeker
@@ -90,4 +90,5 @@ def upload_sicaklik():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
+
 
