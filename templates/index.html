@@ -1,1 +1,74 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-g">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ankara GIS Portalı</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <div class="map-controls">
+        <button id="btn-sicaklik">1. Sıcaklık</button>
+        <button id="btn-nem">2. Nem</button>
+        <button id="btn-egim">3. Eğim</button>
+        <button id="btn-toplama">4. Toplama Haritası</button>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="admin-panel-toggle" id="admin-toggle-btn">
+        Kontrol Paneli
+    </div>
+
+    <div class="admin-panel-container" id="admin-panel">
+        <h3>Kontrol Paneli</h3>
+        
+        <div class="tab-buttons">
+            <button class="tab-link active" data-tab="sicaklik-panel">Sıcaklık</button>
+            <button class="tab-link" data-tab="nem-panel">Nem</button>
+            <button class="tab-link" data-tab="egim-panel">Eğim</button>
+        </div>
+
+        <div id="sicaklik-panel" class="tab-content active">
+            <h4>Sıcaklık Verisi Yükle</h4>
+            <form id="sicaklik-form">
+                <label for="district-select-sicaklik">İlçe Seçin:</label>
+                <select id="district-select-sicaklik" name="districtName">
+                    <option value="Çankaya">Çankaya</option>
+                    <option value="Keçiören">Keçiören</option>
+                    <option value="Yenimahalle">Yenimahalle</option>
+                    <option value="Mamak">Mamak</option>
+                    <option value="Etimesgut">Etimesgut</option>
+                    <option value="Sincan">Sincan</option>
+                    <option value="Altındağ">Altındağ</option>
+                    <option value="Gölbaşı">Gölbaşı</option>
+                    </select>
+                
+                <label for="csv-upload-sicaklik">.CSV Dosyası Seçin:</label>
+                <input type="file" id="csv-upload-sicaklik" name="csv_file" accept=".csv">
+                
+                <button type="submit">Kaydet</button>
+            </form>
+            <div id="sicaklik-status" class="status-message"></div>
+        </div>
+
+        <div id="nem-panel" class="tab-content">
+            <p>Nem yükleme formu buraya gelecek.</p>
+        </div>
+
+        <div id="egim-panel" class="tab-content">
+            <p>Eğim yükleme formu buraya gelecek.</p>
+        </div>
+    </div>
+
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
 
