@@ -1,24 +1,28 @@
-# 1. Adım: Temel Python imajını seç
-FROM python:3.10-slim
+# 1. Temel işletim sistemi olarak Python 3.10'u seç
+FROM python:3.10-slim-bookworm
 
-# 2. Adım (KRİTİK): Geopandas'ın ihtiyaç duyduğu sistem kütüphanelerini kur
+# 2. GeoPandas'ın ihtiyacı olan SİSTEM kütüphanelerini kur
+#    (OnRender'da hataya sebep olan kısım burasıydı)
 RUN apt-get update && apt-get install -y \
-    binutils \
-    libproj-dev \
-    gdal-bin \
     libgdal-dev \
-    python3-gdal \
- && rm -rf /var/lib/apt/lists/*
+    gdal-bin \
+    && rm -rf /var/lib/apt/lists/*
 
-# 3. Adım: Çalışma dizinini ayarla
+# 3. Konteyner içinde çalışacağımız klasörü oluştur
 WORKDIR /app
 
-# 4. Adım: Önce requirements.txt dosyasını kopyala ve kur
+# 4. Önce kütüphane listesini kopyala ve kur
+#    Bu sıralama, kodunuzu her değiştirdiğinizde kurulumu hızlandırır
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Adım: Geri kalan tüm kodları (app.py, static/, templates/) kopyala
+# 5. Projenin geri kalan tüm dosyalarını (app.py, static/, templates/) kopyala
 COPY . .
 
-# 6. Adım: Gunicorn sunucusunu çalıştır
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+# 6. OnRender'ın sunucuya hangi porttan ulaşacağını tanımla
+#    OnRender bu çevre değişkenini otomatik olarak sağlar
+ENV PORT 10000
+
+# 7. Konteyner başladığında çalıştırılacak ana komut
+#    Bu, OnRender'daki "Start Command"in yerini alır
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:${PORT}"]
