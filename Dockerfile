@@ -1,22 +1,24 @@
-# 1. Temel işletim sistemi olarak Python 3.10'u seç
-FROM python:3.10-slim-bookworm
+# 1. Adım: Temel Python imajını seç
+FROM python:3.10-slim
 
-# 2. GeoPandas'ın ihtiyacı olan SİSTEM kütüphanelerini kur
+# 2. Adım (KRİTİK): Geopandas'ın ihtiyaç duyduğu sistem kütüphanelerini kur
 RUN apt-get update && apt-get install -y \
-    libgdal-dev \
+    binutils \
+    libproj-dev \
     gdal-bin \
-    && rm -rf /var/lib/apt/lists/*
+    libgdal-dev \
+    python3-gdal \
+ && rm -rf /var/lib/apt/lists/*
 
-# 3. Konteyner içinde çalışacağımız klasörü oluştur
+# 3. Adım: Çalışma dizinini ayarla
 WORKDIR /app
 
-# 4. Önce kütüphane listesini kopyala ve kur
+# 4. Adım: Önce requirements.txt dosyasını kopyala ve kur
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Projenin geri kalan tüm dosyalarını (app.py, static/, templates/) kopyala
+# 5. Adım: Geri kalan tüm kodları (app.py, static/, templates/) kopyala
 COPY . .
 
-# 6. Konteyner başladığında çalıştırılacak ana komut
-#    Köşeli parantez olmadan "shell form" kullanılıyor
-CMD gunicorn app:app --bind 0.0.0.0:${PORT}
+# 6. Adım: Gunicorn sunucusunu çalıştır
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
