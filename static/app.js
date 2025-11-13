@@ -11,77 +11,64 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 2. Haritayı Boyamak İçin Stil Fonksiyonu ---
     function getStyle(feature) {
-        // DEĞİŞTİ: API'den gelen veride ilçe adı 'text' özelliğindedir.
-        const districtName = feature.properties.text; 
+        // NOT: Buradaki 'NAME_3' özelliği, kullandığınız GeoJSON dosyasına göre değişebilir.
+        const districtName = feature.properties.NAME_3; 
         
-        const color = sicaklikData[districtName] || '#999999'; // Veri yoksa gri yap
-
+        const color = sicaklikData[districtName] || '#999999'; 
         return {
             fillColor: color,
-            weight: 2,
-            opacity: 1,
-            color: 'white',
-            dashArray: '3',
-            fillOpacity: 0.7
+            weight: 2, opacity: 1, color: 'white',
+            dashArray: '3', fillOpacity: 0.7
         };
-    }
-
-    // --- YENİ FONKSİYON: İlçe Seçim Menüsünü Doldurur ---
-    function populateDistrictDropdown(features) {
-        const selectMenu = document.getElementById('district-select-sicaklik');
-        selectMenu.innerHTML = ''; // Menüyü temizle ("Yükleniyor..." yazısını kaldır)
-
-        // API'den gelen her ilçe için bir <option> oluştur
-        features.forEach(feature => {
-            const districtName = feature.properties.text;
-            const option = document.createElement('option');
-            option.value = districtName;
-            option.textContent = districtName;
-            selectMenu.appendChild(option);
-        });
     }
 
     // --- 3. Ana Harita Verisi Yükleme Fonksiyonu ---
     async function loadMapData() {
         try {
-            // 1. Adım: Backend'den mevcut boyama verilerini (renkleri) al
+            // 1. Adım: Backend'den mevcut boyama verilerini al
             const dataResponse = await fetch('/get_data');
             const allData = await dataResponse.json();
             sicaklikData = allData.sicaklik || {};
 
-            // 2. Adım: GeoJSON'u statik dosya yerine BİZİM BACKEND'imizden yükle
-            const geoJsonResponse = await fetch('/get_ankara_map');
+            // ==========================================================
+            // DEĞİŞİKLİK BURADA
+            // ==========================================================
+            // 2. Adım: GeoJSON'u API yerine GitHub Release'den yükle
+            
+            // 1. Adımda kopyaladığınız GitHub linkini bu tırnakların arasına yapıştırın
+            const geoJsonUrl = 'https://github.com/IceSh0ck/GIS/releases/tag/v1.0-data';
+            
+            // Eski satır: const geoJsonResponse = await fetch('/turkey-districts.geojson');
+            const geoJsonResponse = await fetch(geoJsonUrl); // Yeni satır
             
             if (!geoJsonResponse.ok) {
-                // Backend'den (örn: TKGM API hatası) bir hata geldiyse
-                const errorData = await geoJsonResponse.json();
-                throw new Error(errorData.error || 'Harita verisi alınamadı.');
+                throw new Error('Harita dosyası GitHub Release\'den yüklenemedi. URL\'yi kontrol edin.');
             }
+            // ==========================================================
             
-            const ankaraDistricts = await geoJsonResponse.json();
+            const allDistricts = await geoJsonResponse.json();
 
             // 3. Adım: Haritada eski katman varsa kaldır
             if (ankaraLayer) {
                 map.removeLayer(ankaraLayer);
             }
             
-            // 4. Adım: GeoJSON'u haritaya ekle
-            ankaraLayer = L.geoJson(ankaraDistricts, { 
+            // 4. Adım: GeoJSON'u haritaya ekle (FİLTRELİ)
+            ankaraLayer = L.geoJson(allDistricts, { 
                 
-                // DEĞİŞTİ: 'filter' bölümü SİLİNDİ
-                // (Artık gerek yok, çünkü API'den sadece Ankara geliyor)
+                filter: function(feature) {
+                    // NOT: 'NAME_1' özelliği de dosyaya göre değişebilir
+                    const provinceName = feature.properties.NAME_1; 
+                    return provinceName === "Ankara";
+                },
 
                 style: getStyle,
                 
                 onEachFeature: (feature, layer) => {
-                    // DEĞİŞTİ: İlçe adı 'text' özelliğinden geliyor
-                    const districtName = feature.properties.text;
+                    const districtName = feature.properties.NAME_3; 
                     layer.bindPopup(districtName); 
                 }
             }).addTo(map);
-
-            // 5. Adım (YENİ): İlçe seçim menüsünü API'den gelen verilerle doldur
-            populateDistrictDropdown(ankaraDistricts.features);
 
         } catch (error) {
             console.error('Harita verisi yüklenirken hata oluştu:', error);
@@ -92,18 +79,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 4. Sayfa Yüklendiğinde Haritayı İlk Kez Yükle ---
     loadMapData();
 
-
-    // --- 5. Kontrol Paneli Açma/Kapatma Mantığı (Değişiklik yok) ---
+    // --- 5, 6, 7 (Panel, Tab ve Form mantığı) ---
+    // Bu kısımlarda hiçbir değişiklik yok.
+    
     const toggleBtn = document.getElementById('admin-toggle-btn');
     const adminPanel = document.getElementById('admin-panel');
     toggleBtn.addEventListener('click', () => {
         adminPanel.classList.toggle('open');
     });
 
-    // --- 6. Kontrol Paneli İçi Tab Değiştirme Mantığı (Değişiklik yok) ---
     const tabLinks = document.querySelectorAll('.tab-link');
     const tabContents = document.querySelectorAll('.tab-content');
-
     tabLinks.forEach(link => {
         link.addEventListener('click', (e) => {
             const tabId = e.target.dataset.tab; 
@@ -114,15 +100,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- 7. Sıcaklık Formu Gönderme (Submit) Mantığı (Değişiklik yok) ---
     const sicaklikForm = document.getElementById('sicaklik-form');
     const sicaklikStatus = document.getElementById('sicaklik-status');
-
     sicaklikForm.addEventListener('submit', async (e) => {
         e.preventDefault(); 
         sicaklikStatus.textContent = 'Yükleniyor...';
         sicaklikStatus.style.color = 'black';
-
         const formData = new FormData(sicaklikForm);
 
         try {
@@ -130,16 +113,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST',
                 body: formData
             });
-
             const result = await response.json();
 
             if (response.ok) { 
                 sicaklikStatus.textContent = `Başarılı: ${result.district} için ortalama ${result.avg_temp.toFixed(2)}°C olarak kaydedildi.`;
                 sicaklikStatus.style.color = 'green';
-                
-                // Haritayı yeni renklerle yeniden çiz
-                loadMapData(); 
-                
+                loadMapData(); // Haritayı yeniden çiz
                 sicaklikForm.reset();
             } else {
                 sicaklikStatus.textContent = `Hata: ${result.message}`;
