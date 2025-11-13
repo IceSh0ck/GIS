@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ankara CBS Analiz</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    
     <style>
         /* Temel Sayfa Düzeni */
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f2f5; }
@@ -16,6 +19,7 @@
             color: white;
             padding: 20px;
             box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 10; /* Haritanın üstünde */
         }
         .sidebar-left h2 { margin-top: 0; }
         .sidebar-left ul { list-style: none; padding: 0; }
@@ -32,23 +36,18 @@
         /* Ana İçerik (Harita Alanı) */
         .main-content {
             flex-grow: 1;
-            padding: 20px;
+            padding: 0; /* GÜNCELLENDİ: Harita için padding'i sıfırla */
             position: relative;
         }
-        #map-placeholder {
+        
+        /* GÜNCELLENDİ: Placeholder yerine gerçek harita alanı */
+        #map {
             width: 100%;
-            height: 95%;
+            height: 100vh; /* Tüm ekranı kapla */
             background-color: #e0e0e0;
-            border: 2px dashed #b0b0b0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 24px;
-            color: #777;
-            text-align: center;
         }
 
-        /* Sağ Kontrol Paneli (Gizli/Açılır) */
+        /* Sağ Kontrol Paneli (Gizli/Açılır) - Değişiklik Yok */
         .control-panel-toggle {
             position: fixed;
             top: 20px;
@@ -89,7 +88,7 @@
             cursor: pointer;
         }
 
-        /* Yükleme Formu (Panel içinde gizli) */
+        /* Yükleme Formu (Panel içinde gizli) - Değişiklik Yok */
         #upload-section {
             display: none; /* Başlangıçta gizli */
             margin-top: 20px;
@@ -120,23 +119,21 @@
     </style>
 </head>
 <body>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <div class="container">
         <div class="sidebar-left">
             <h2>Harita Katmanları</h2>
             <ul>
-                <li onclick="showMap('sicaklik')">1. Sıcaklık</li>
-                <li onclick="showMap('nem')">2. Nem</li>
-                <li onclick="showMap('egim')">3. Eğim</li>
-                <li onclick="showMap('toplama')">4. Toplama Haritası</li>
+                <li onclick="updateMap('sicaklik')">1. Sıcaklık</li>
+                <li onclick="updateMap('nem')">2. Nem</li>
+                <li onclick="updateMap('egim')">3. Eğim</li>
+                <li onclick="updateMap('toplama')">4. Toplama Haritası</li>
             </ul>
         </div>
 
         <div class="main-content">
-            <div id="map-placeholder">
-                Gerçek CBS Haritası (örn: Leaflet.js)<br>
-                ve Ankara GeoJSON verisi buraya yüklenecek.
-            </div>
+            <div id="map"></div>
         </div>
     </div>
 
@@ -165,6 +162,9 @@
                 </select>
 
                 <label for="file-upload">.CSV Dosyasını Yükleyin:</label>
+                <small id="csv-info" style="color: #555; display: block; margin-top: -5px; margin-bottom: 10px;">
+                    (CSV dosyanızda 'sicaklik', 'nem' veya 'egim' adında bir sütun olmalıdır)
+                </small>
                 <input type="file" id="file-upload" name="file" accept=".csv">
 
                 <button type="submit">Kaydet</button>
@@ -174,7 +174,7 @@
     </div>
 
     <script>
-        // --- Kontrol Paneli ve Form Yönetimi ---
+        // --- 1. Kontrol Paneli ve Form Yönetimi (Çoğunlukla Aynı) ---
 
         const panel = document.getElementById('control-panel');
         const toggleBtn = document.getElementById('toggle-panel-btn');
@@ -184,26 +184,19 @@
         const uploadForm = document.getElementById('upload-form');
         const uploadStatus = document.getElementById('upload-status');
 
-        // Kontrol Panelini aç/kapat
-        toggleBtn.addEventListener('click', () => {
-            panel.classList.toggle('open');
-        });
+        toggleBtn.addEventListener('click', () => panel.classList.toggle('open'));
 
-        // Kontrol Panelindeki (Sıcaklık, Nem, Eğim) butonlarına basınca formu göster
         function showUploadForm(type) {
             uploadTitle.innerText = `${type.charAt(0).toUpperCase() + type.slice(1)} Verisi Yükle`;
-            dataTypeInput.value = type; // Gizli input'a veri tipini yaz
-            uploadSection.style.display = 'block'; // Formu görünür yap
+            dataTypeInput.value = type; 
+            uploadSection.style.display = 'block'; 
         }
 
-        // Form "Kaydet" butonuna basıldığında
         uploadForm.addEventListener('submit', function(event) {
-            event.preventDefault(); // Sayfanın yeniden yüklenmesini engelle
+            event.preventDefault(); 
             uploadStatus.innerText = 'Yükleniyor...';
-
             const formData = new FormData(uploadForm);
             
-            // Veriyi 'app.py'deki '/upload_data' adresine gönder
             fetch('/upload_data', {
                 method: 'POST',
                 body: formData
@@ -213,8 +206,10 @@
                 if (data.success) {
                     uploadStatus.innerText = `Başarılı: ${data.message}`;
                     uploadStatus.style.color = 'green';
-                    // İleride burada haritayı güncelleyecek kod çağrılabilir
-                    // ornegin: refreshMap(formData.get('ilce'), data.renk);
+                    
+                    // GÜNCELLENDİ: Yükleme başarılıysa, haritayı otomatik güncelle
+                    const currentDataType = formData.get('data_type');
+                    updateMap(currentDataType);
                 } else {
                     uploadStatus.innerText = `Hata: ${data.error}`;
                     uploadStatus.style.color = 'red';
@@ -226,12 +221,98 @@
             });
         });
 
-        // --- Harita Alanı Yönetimi (Şimdilik Placeholder) ---
-        function showMap(mapType) {
-            const mapPlaceholder = document.getElementById('map-placeholder');
-            mapPlaceholder.innerText = `${mapType.toUpperCase()} Haritası alanı.\n\nGerçek harita verisi buraya yüklenecek.`;
-            console.log(`${mapType} haritası istendi.`);
+        // --- 2. Leaflet Harita Yönetimi (YENİ EKLENDİ) ---
+
+        // Ankara için sınırlar (Kullanıcının haritadan çok uzaklaşmasını engeller)
+        const ankaraBounds = L.latLngBounds([39.4, 32.0], [40.5, 33.7]);
+
+        // Haritayı 'map' div'ine başlat
+        const map = L.map('map', {
+            center: [39.93, 32.85], // Ankara merkez
+            zoom: 9,
+            minZoom: 9,
+            maxZoom: 14,
+            maxBounds: ankaraBounds,
+            maxBoundsViscosity: 1.0
+        });
+
+        // Temel harita katmanı (Sade bir görünüm için)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd'
+        }).addTo(map);
+
+        // Mevcut ilçe katmanını saklamak için global değişken
+        let geojsonLayer = null;
+        let currentMapType = 'sicaklik'; // Başlangıçta hangi haritanın yüklü olduğunu bilmek için
+
+        // Haritayı güncelleyen ana fonksiyon
+        function updateMap(mapType) {
+            console.log(`${mapType} için harita güncelleniyor...`);
+            currentMapType = mapType; // Mevcut harita tipini sakla
+
+            // app.py'deki yeni API'den veriyi çek
+            fetch(`/api/get_map_data/${mapType}`)
+                .then(response => response.json())
+                .then(geojsonData => {
+                    // Hata varsa konsola yazdır
+                    if (geojsonData.error) {
+                        console.error("Harita verisi alınamadı:", geojsonData.error);
+                        return;
+                    }
+
+                    // Eski katman varsa haritadan kaldır
+                    if (geojsonLayer) {
+                        map.removeLayer(geojsonLayer);
+                    }
+                    
+                    // Yeni GeoJSON verisiyle katman oluştur
+                    geojsonLayer = L.geoJson(geojsonData, {
+                        style: styleFunction, // Renklendirme fonksiyonu
+                        onEachFeature: onEachFeatureFunction // Tıklama/Popup fonksiyonu
+                    }).addTo(map);
+                })
+                .catch(error => console.error('Harita verisi alınırken hata:', error));
         }
+
+        // Renklendirme fonksiyonu: GeoJSON'daki 'renk' özelliğini okur
+        function styleFunction(feature) {
+            return {
+                fillColor: feature.properties.renk || '#808080', // app.py'den gelen renk
+                weight: 2,
+                opacity: 1,
+                color: '#333333', // İlçe sınırı rengi
+                fillOpacity: 0.7
+            };
+        }
+
+        // İlçelere tıklayınca açılan popup (bilgi penceresi)
+        function onEachFeatureFunction(feature, layer) {
+            let popupContent = `<b>${feature.properties.ilce}</b>`;
+            
+            // 'toplama' haritası için özel popup
+            if (currentMapType === 'toplama') {
+                let renk = feature.properties.renk;
+                let durum = "Veri Yok";
+                if (renk === '#00FF00') durum = "Çok Uygun";
+                else if (renk === '#FFFF00') durum = "Orta Uygun";
+                else if (renk === '#FF0000') durum = "Uygun Değil";
+                popupContent += `<br>Durum: ${durum}`;
+            } 
+            // Diğer haritalar için (sicaklik, nem, egim)
+            else if (feature.properties.ortalama) {
+                popupContent += `<br>Ortalama Değer: ${feature.properties.ortalama.toFixed(2)}`;
+            } else {
+                popupContent += `<br>Veri Yok`;
+            }
+            
+            layer.bindPopup(popupContent);
+        }
+
+        // Sayfa ilk yüklendiğinde varsayılan olarak 'Sıcaklık' haritasını yükle
+        document.addEventListener('DOMContentLoaded', () => {
+            updateMap('sicaklik');
+        });
     </script>
 </body>
 </html>
